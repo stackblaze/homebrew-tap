@@ -1,6 +1,6 @@
 # StackBlaze Homebrew tap
 
-Homebrew tap for the [StackBlaze CLI](https://docs.stackblaze.com/cli) (macOS and Linux, arm64 and x86_64).
+Homebrew tap for the [StackBlaze CLI](https://www.stackblaze.com/docs/reference/cli) (macOS and Linux, arm64 and x86_64).
 
 ## Install
 
