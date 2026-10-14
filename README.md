@@ -35,11 +35,18 @@ scripts/update-formula.sh v1.2.3   # or latest / dev / any GHCR tag
 The [`Update formula`](.github/workflows/update.yml) workflow runs the script, installs and tests the
 formula on macOS and Linux, then commits it. It runs on:
 
-- `repository_dispatch` (`cli-release`, payload `{"tag": "vX.Y.Z"}`), sent by the CLI's stable release job;
-- manual `workflow_dispatch` with a `tag` input.
+- `schedule` (every 30 minutes): [`scripts/latest-stable-version.sh`](scripts/latest-stable-version.sh) reads the
+  version annotation of the public GHCR `latest` tag anonymously (the CLI repo is private, so its GitHub Releases
+  are not readable from here). Only a plain `X.Y.Z` is accepted, so `-dev.N` prereleases never reach the formula.
+  If it matches the formula's `version` the run stops there; otherwise it regenerates from `vX.Y.Z`, tests and
+  commits with this repo's own `GITHUB_TOKEN`. No cross-repo token is needed;
+- manual `workflow_dispatch`: leave `tag` empty for the same latest-stable check, or pass any GHCR tag to force a
+  regeneration from it;
+- `repository_dispatch` (`cli-release`, payload `{"tag": "vX.Y.Z"}`), sent by the CLI's stable release job when it
+  has a `HOMEBREW_TAP_TOKEN` (optional; the schedule covers it otherwise).
 
-> The initial formula was generated from a dev prerelease (`v1.0.0-dev.66`) so the tap could be tested
-> before the first stable CLI release; that release overwrites it.
+GitHub disables scheduled workflows in a public repo after 60 days without activity; re-enable it from the
+Actions tab if that happens.
 
 ## License
 
