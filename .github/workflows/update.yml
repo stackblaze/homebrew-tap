@@ -1,12 +1,18 @@
 name: Update formula
 
 on:
+  # Self-service polling: the CLI repo has no token that can write to this
+  # repo, so a scheduled run resolves the latest STABLE release from the public
+  # GHCR `latest` tag and only regenerates/tests/commits when it differs from
+  # the formula. Uses this repo's own GITHUB_TOKEN; no cross-repo secret.
+  schedule:
+    - cron: "17,47 * * * *"
   workflow_dispatch:
     inputs:
       tag:
-        description: "GHCR tag of ghcr.io/stackblaze/stackblaze-cli (e.g. v1.0.0, latest, dev)"
-        required: true
-        default: latest
+        description: "GHCR tag of ghcr.io/stackblaze/stackblaze-cli (e.g. v1.0.0, latest, dev). Empty = latest stable, no-op if the formula already has it."
+        required: false
+        default: ""
   repository_dispatch:
     # Sent by stackblaze/stackblaze-cli's release job:
     #   gh api repos/stackblaze/homebrew-tap/dispatches -f event_type=cli-release -f client_payload[tag]=vX.Y.Z
@@ -24,25 +30,45 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
+      changed: ${{ steps.tag.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
       - id: tag
         env:
           INPUT_TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
         run: |
-          if ! printf '%s' "$INPUT_TAG" | grep -Eq '^[A-Za-z0-9_.-]{1,128}$'; then
-            echo "::error::invalid tag '${INPUT_TAG}'"; exit 1
+          if [ -n "$INPUT_TAG" ]; then
+            # Explicit tag (manual dispatch or cli-release): always regenerate.
+            if ! printf '%s' "$INPUT_TAG" | grep -Eq '^[A-Za-z0-9_.-]{1,128}$'; then
+              echo "::error::invalid tag '${INPUT_TAG}'"; exit 1
+            fi
+            echo "tag=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          echo "tag=${INPUT_TAG}" >> "$GITHUB_OUTPUT"
-      - run: ./scripts/update-formula.sh "${{ steps.tag.outputs.tag }}"
-      - run: git diff --stat
-      - uses: actions/upload-artifact@v4
+          latest="$(./scripts/latest-stable-version.sh)"
+          current="$(sed -n 's/^  version "\(.*\)"$/\1/p' Formula/stackblaze.rb)"
+          echo "latest stable on GHCR: ${latest}; formula: ${current:-<none>}"
+          echo "tag=v${latest}" >> "$GITHUB_OUTPUT"
+          if [ "$latest" = "$current" ]; then
+            echo "Formula already at ${latest}; nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.tag.outputs.changed == 'true'
+        run: ./scripts/update-formula.sh "${{ steps.tag.outputs.tag }}"
+      - if: steps.tag.outputs.changed == 'true'
+        run: git diff --stat
+      - if: steps.tag.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
         with:
           name: formula
           path: Formula/stackblaze.rb
 
   test:
     needs: generate
+    if: needs.generate.outputs.changed == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -65,6 +91,7 @@ jobs:
 
   commit:
     needs: [generate, test]
+    if: needs.generate.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
