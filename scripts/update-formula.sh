@@ -78,7 +78,7 @@ cat >"$OUT" <<EOF
 # ghcr.io/${REPOSITORY} (one blob per platform, addressed by digest).
 class Stackblaze < Formula
   desc "Command-line interface for the StackBlaze cloud platform"
-  homepage "https://www.stackblaze.com/docs/reference/cli"
+  homepage "https://www.stackblaze.com/docs"
   version "${VERSION}"
   license "MIT"
 ${note}
